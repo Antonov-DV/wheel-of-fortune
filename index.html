@@ -53,11 +53,11 @@ body {
   display: inline-flex; align-items: center; justify-content: center;
   border: none; border-radius: 50%;
   background: rgba(255,255,255,.14);
-  color: #fff; font-size: 13px; line-height: 1;
+  color: #fff; font-size: 12px; line-height: 1;
   cursor: pointer; padding: 0;
   transition: background .15s;
 }
-.chip-x:hover { background: #7f8c8d; }
+.chip-x:hover { background: #e74c3c; }
 
 #excluded {
   display: flex;
@@ -357,7 +357,7 @@ function renderChips() {
     const x = document.createElement('button');
     x.type = 'button';
     x.className = 'chip-x';
-    x.textContent = '🔇';
+    x.textContent = '✕';
     x.title = 'Замьютить ' + name;
     x.addEventListener('click', () => {
       if (spinning) return;
