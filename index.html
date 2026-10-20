@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Колесо фортуны</title>
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: system-ui, sans-serif;
+  background: radial-gradient(circle at 50% 20%, #2c3e50, #0f1420 70%);
+  color: #fff;
+}
+
+.wrap { text-align: center; padding: 20px; }
+
+h1 { margin: 0 0 16px; font-weight: 700; }
+
+#options {
+  width: min(460px, 95%);
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 10px;
+  background: rgba(255,255,255,.08);
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+  outline: none;
+}
+#options:focus { border-color: #f1c40f; }
+
+.wheel-box { position: relative; display: inline-block; }
+
+.pointer {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 16px solid transparent;
+  border-right: 16px solid transparent;
+  border-top: 30px solid #f1c40f;
+  filter: drop-shadow(0 3px 5px rgba(0,0,0,.5));
+  z-index: 2;
+}
+
+canvas {
+  display: block;
+  border-radius: 50%;
+  max-width: 100%;
+  height: auto;
+  box-shadow: 0 0 0 8px rgba(255,255,255,.12), 0 18px 45px rgba(0,0,0,.55);
+}
+
+#spin {
+  margin-top: 24px;
+  padding: 14px 48px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1b1b1b;
+  background: linear-gradient(180deg, #f7d154, #f1a90c);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform .15s, box-shadow .15s;
+  box-shadow: 0 6px 18px rgba(241,201,15,.35);
+}
+#spin:hover:not(:disabled) { transform: translateY(-2px); }
+#spin:disabled { opacity: .55; cursor: wait; }
+
+#result {
+  min-height: 34px;
+  margin-top: 16px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #f1c40f;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎡 Колесо фортуны</h1>
+  <input id="options" value="Ольга Козлова, Дмитрий Антонов, Дмитрий Калинин, Арсений Коротков, Дмитрий Максимов, Максим Бирюков, Инна Грекова, Михаил Васильев, Константин Мариненков, Тимур Мустафин">
+  <div class="wheel-box">
+    <div class="pointer"></div>
+    <canvas id="wheel" width="500" height="500"></canvas>
+  </div>
+  <button id="spin">Крутить!</button>
+  <div id="result"></div>
+</div>
+
+<script>
+const canvas    = document.getElementById('wheel');
+const ctx       = canvas.getContext('2d');
+const resultEl  = document.getElementById('result');
+const spinBtn   = document.getElementById('spin');
+const optionsIn = document.getElementById('options');
+
+const PALETTE = [
+  '#e74c3c', '#f39c12', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db',
+  '#9b59b6', '#e84393', '#00b894', '#fd79a8', '#6c5ce7', '#d63031'
+];
+
+const TAU = Math.PI * 2;
+let rotation = 0;    // текущий угол поворота колеса
+let spinning = false;
+let winner   = null; // индекс подсвеченного сектора
+
+const getOptions = () =>
+  optionsIn.value.split(',').map(s => s.trim()).filter(Boolean);
+
+function draw(opts) {
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  const R  = cx - 8;
+  const seg = TAU / opts.length;
+  const fontSize = opts.length > 8 ? 14 : 17;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  opts.forEach((label, i) => {
+    const a0 = rotation + i * seg;
+    const highlighted = i === winner;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, a0, a0 + seg);
+    ctx.closePath();
+    ctx.fillStyle = PALETTE[i % PALETTE.length];
+    ctx.fill();
+    ctx.lineWidth = highlighted ? 6 : 2;
+    ctx.strokeStyle = highlighted ? '#fff' : 'rgba(255,255,255,.7)';
+    ctx.stroke();
+
+    // подпись вдоль радиуса сектора
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(a0 + seg / 2);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.fillStyle = '#fff';
+    const text = label.length > 20 ? label.slice(0, 19) + '…' : label;
+    ctx.fillText(text, R - 16, 0);
+    ctx.restore();
+  });
+
+  // ступица в центре
+  ctx.beginPath();
+  ctx.arc(cx, cy, 34, 0, TAU);
+  ctx.fillStyle = '#1b2735';
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#f1c40f';
+  ctx.stroke();
+}
+
+function finish(opts) {
+  const seg = TAU / opts.length;
+  // стрелка сверху = угол -90°; ищем сектор, попавший под неё
+  let local = (-Math.PI / 2 - rotation) % TAU;
+  if (local < 0) local += TAU;
+  winner = Math.floor(local / seg) % opts.length;
+
+  draw(opts);
+  resultEl.textContent = '🎉 Победитель: ' + opts[winner];
+  spinning = false;
+  spinBtn.disabled = false;
+  optionsIn.disabled = false;
+}
+
+spinBtn.addEventListener('click', () => {
+  if (spinning) return;
+  const opts = getOptions();
+  if (opts.length < 2) {
+    resultEl.textContent = 'Добавьте хотя бы два варианта';
+    return;
+  }
+
+  spinning = true;
+  spinBtn.disabled = true;
+  optionsIn.disabled = true;
+  winner = null;
+  resultEl.textContent = '';
+
+  const from     = rotation;
+  const target   = rotation + TAU * (5 + Math.random() * 2) + Math.random() * TAU;
+  const duration = 4200 + Math.random() * 800;
+  const start    = performance.now();
+
+  function frame(now) {
+    const t    = Math.min(1, (now - start) / duration);
+    const ease = 1 - Math.pow(1 - t, 4); // easeOutQuart — быстрый разгон, мягкое торможение
+    rotation   = from + (target - from) * ease;
+    draw(opts);
+    if (t < 1) requestAnimationFrame(frame);
+    else finish(opts);
+  }
+  requestAnimationFrame(frame);
+});
+
+optionsIn.addEventListener('input', () => {
+  if (spinning) return;
+  winner = null;
+  resultEl.textContent = '';
+  draw(getOptions());
+});
+
+draw(getOptions());
+</script>
+</body>
+</html>
