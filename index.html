@@ -53,11 +53,11 @@ body {
   display: inline-flex; align-items: center; justify-content: center;
   border: none; border-radius: 50%;
   background: rgba(255,255,255,.14);
-  color: #fff; font-size: 12px; line-height: 1;
+  color: #fff; font-size: 13px; line-height: 1;
   cursor: pointer; padding: 0;
   transition: background .15s;
 }
-.chip-x:hover { background: #e74c3c; }
+.chip-x:hover { background: #7f8c8d; }
 
 #excluded {
   display: flex;
@@ -192,7 +192,7 @@ canvas {
     <form id="add-form" autocomplete="off">
       <input id="new-name" placeholder="Имя нового игрока" maxlength="30">
       <button type="submit" id="add-btn">Добавить</button>
-      <button type="button" id="reset-btn" hidden>Вернуть всех</button>
+      <button type="button" id="reset-btn" hidden>Reset</button>
     </form>
   </div>
 
@@ -237,29 +237,30 @@ const DEFAULT_NAMES = [
   'Тимур Мустафин'
 ];
 
-// localStorage: кто исключён крестиком и кого добавили вручную
+// localStorage: кто замьючен и кого добавили вручную
 const LS_KEY = 'wheel-of-fortune:v1';
 
 function loadState() {
-  let excluded = [], extra = [];
+  let muted = [], extra = [];
   try {
     const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-    if (Array.isArray(saved.excluded)) excluded = saved.excluded;
+    if (Array.isArray(saved.muted)) muted = saved.muted;
+    if (Array.isArray(saved.excluded)) muted = muted.concat(saved.excluded); // старый формат
     if (Array.isArray(saved.extra)) extra = saved.extra;
   } catch (e) { /* повреждённые данные — стартуем с полным списком */ }
-  return { excluded: new Set(excluded), extra };
+  return { muted: new Set(muted), extra };
 }
 
 const state = loadState();
 
 const currentNames = () => [
-  ...DEFAULT_NAMES.filter(n => !state.excluded.has(n)),
-  ...state.extra
+  ...DEFAULT_NAMES.filter(n => !state.muted.has(n)),
+  ...state.extra.filter(n => !state.muted.has(n))
 ];
 
 const save = () =>
   localStorage.setItem(LS_KEY, JSON.stringify({
-    excluded: [...state.excluded],
+    muted: [...state.muted],
     extra: state.extra
   }));
 
@@ -341,13 +342,11 @@ function renderChips() {
     const x = document.createElement('button');
     x.type = 'button';
     x.className = 'chip-x';
-    x.textContent = '✕';
-    x.title = 'Убрать ' + name;
+    x.textContent = '🔇';
+    x.title = 'Замьютить ' + name;
     x.addEventListener('click', () => {
       if (spinning) return;
-      const name = names.splice(i, 1)[0];
-      if (DEFAULT_NAMES.includes(name)) state.excluded.add(name);
-      else state.extra = state.extra.filter(n => n !== name);
+      state.muted.add(names.splice(i, 1)[0]);
       save();
       winner = null;
       resultEl.textContent = '';
@@ -359,14 +358,15 @@ function renderChips() {
     chipsEl.appendChild(chip);
   });
 
-  resetBtn.hidden = !state.excluded.size && !state.extra.length;
+  resetBtn.hidden = !state.muted.size && !state.extra.length;
   renderExcluded();
 }
 
-// исключённые показываются отдельным блоком — вернуть можно в один клик
+// замьюченные показываются отдельным блоком — вернуть можно в один клик
 function renderExcluded() {
   excludedEl.innerHTML = '';
-  const excluded = DEFAULT_NAMES.filter(n => state.excluded.has(n));
+  const roster = [...DEFAULT_NAMES, ...state.extra];
+  const excluded = roster.filter(n => state.muted.has(n));
   if (!excluded.length) return;
 
   const caption = document.createElement('span');
@@ -380,7 +380,7 @@ function renderExcluded() {
 
     const dot = document.createElement('span');
     dot.className = 'dot';
-    dot.style.background = PALETTE[DEFAULT_NAMES.indexOf(name) % PALETTE.length];
+    dot.style.background = PALETTE[roster.indexOf(name) % PALETTE.length];
 
     const labelEl = document.createElement('span');
     labelEl.textContent = name;
@@ -392,7 +392,7 @@ function renderExcluded() {
     back.title = 'Вернуть ' + name;
     back.addEventListener('click', () => {
       if (spinning) return;
-      state.excluded.delete(name);
+      state.muted.delete(name);
       save();
       names = currentNames();
       winner = null;
@@ -423,10 +423,10 @@ addForm.addEventListener('submit', e => {
   draw(names);
 });
 
-// вернуть полный состав: снять исключения и убрать гостей
+// Reset: размьютить всех и убрать добавленных гостей
 resetBtn.addEventListener('click', () => {
   if (spinning) return;
-  state.excluded.clear();
+  state.muted.clear();
   state.extra = [];
   save();
   names = currentNames();
