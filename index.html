@@ -273,6 +273,7 @@ let winner   = null; // индекс подсвеченного сектора
 function draw(list) {
   const cx = canvas.width / 2, cy = canvas.height / 2;
   const R  = cx - 8;
+  const HUB_R = 34; // радиус ступицы — от неё отсчитываем место под подпись
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!list.length) return;
@@ -300,16 +301,30 @@ function draw(list) {
     ctx.rotate(a0 + seg / 2);
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    ctx.font = `bold ${fontSize}px sans-serif`;
     ctx.fillStyle = '#fff';
-    const text = label.length > 20 ? label.slice(0, 19) + '…' : label;
+
+    // уменьшаем кегль, пока текст не влезет между ступицей и ободом
+    const maxLen = R - 16 - HUB_R - 6;
+    let size = fontSize;
+    ctx.font = `bold ${size}px sans-serif`;
+    while (size > 10 && ctx.measureText(label).width > maxLen) {
+      size--;
+      ctx.font = `bold ${size}px sans-serif`;
+    }
+    let text = label;
+    if (ctx.measureText(text).width > maxLen) {
+      while (text.length > 1 && ctx.measureText(text + '…').width > maxLen) {
+        text = text.slice(0, -1);
+      }
+      text += '…';
+    }
     ctx.fillText(text, R - 16, 0);
     ctx.restore();
   });
 
   // ступица в центре
   ctx.beginPath();
-  ctx.arc(cx, cy, 34, 0, TAU);
+  ctx.arc(cx, cy, HUB_R, 0, TAU);
   ctx.fillStyle = '#1b2735';
   ctx.fill();
   ctx.lineWidth = 4;
