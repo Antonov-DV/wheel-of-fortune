@@ -61,7 +61,42 @@ h1 { margin: 0 0 16px; font-weight: 700; }
 }
 .chip-x:hover { background: #e74c3c; }
 
-#players.locked .chip-x { pointer-events: none; opacity: .35; }
+#excluded {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+#excluded:empty { display: none; }
+
+#excluded .ex-label {
+  color: rgba(255,255,255,.4);
+  font-size: 13px;
+  align-self: center;
+}
+
+.chip.ex {
+  background: transparent;
+  border-style: dashed;
+  border-color: rgba(255,255,255,.2);
+  color: rgba(255,255,255,.5);
+}
+.chip.ex .dot { opacity: .45; }
+
+.chip-restore {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%;
+  background: rgba(255,255,255,.14);
+  color: #fff; font-size: 13px; line-height: 1;
+  cursor: pointer; padding: 0;
+  transition: background .15s;
+}
+.chip-restore:hover { background: #2ecc71; }
+
+#players.locked .chip-x,
+#players.locked .chip-restore { pointer-events: none; opacity: .35; }
 
 #add-form { display: flex; gap: 8px; justify-content: center; }
 
@@ -156,6 +191,7 @@ canvas {
 
   <div id="players">
     <div id="chips"></div>
+    <div id="excluded"></div>
     <form id="add-form" autocomplete="off">
       <input id="new-name" placeholder="Имя нового игрока" maxlength="30">
       <button type="submit" id="add-btn">Добавить</button>
@@ -178,6 +214,7 @@ const resultEl  = document.getElementById('result');
 const spinBtn   = document.getElementById('spin');
 const playersEl = document.getElementById('players');
 const chipsEl   = document.getElementById('chips');
+const excludedEl = document.getElementById('excluded');
 const addForm   = document.getElementById('add-form');
 const newNameIn = document.getElementById('new-name');
 const addBtn    = document.getElementById('add-btn');
@@ -326,6 +363,50 @@ function renderChips() {
   });
 
   resetBtn.hidden = !state.excluded.size && !state.extra.length;
+  renderExcluded();
+}
+
+// исключённые показываются отдельным блоком — вернуть можно в один клик
+function renderExcluded() {
+  excludedEl.innerHTML = '';
+  const excluded = DEFAULT_NAMES.filter(n => state.excluded.has(n));
+  if (!excluded.length) return;
+
+  const caption = document.createElement('span');
+  caption.className = 'ex-label';
+  caption.textContent = 'Не играют:';
+  excludedEl.appendChild(caption);
+
+  excluded.forEach(name => {
+    const chip = document.createElement('span');
+    chip.className = 'chip ex';
+
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.background = PALETTE[DEFAULT_NAMES.indexOf(name) % PALETTE.length];
+
+    const labelEl = document.createElement('span');
+    labelEl.textContent = name;
+
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'chip-restore';
+    back.textContent = '↩';
+    back.title = 'Вернуть ' + name;
+    back.addEventListener('click', () => {
+      if (spinning) return;
+      state.excluded.delete(name);
+      save();
+      names = currentNames();
+      winner = null;
+      resultEl.textContent = '';
+      renderChips();
+      draw(names);
+    });
+
+    chip.append(dot, labelEl, back);
+    excludedEl.appendChild(chip);
+  });
 }
 
 addForm.addEventListener('submit', e => {
