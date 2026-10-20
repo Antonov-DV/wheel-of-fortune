@@ -22,10 +22,52 @@ body {
 
 h1 { margin: 0 0 16px; font-weight: 700; }
 
-#options {
-  width: min(460px, 95%);
+#players { max-width: 620px; margin: 0 auto 18px; }
+
+#chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 14px;
+  min-height: 36px;
+}
+
+#chips .empty { color: rgba(255,255,255,.45); font-size: 14px; align-self: center; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.09);
+  border: 1px solid rgba(255,255,255,.12);
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.chip .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+.chip-x {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%;
+  background: rgba(255,255,255,.14);
+  color: #fff; font-size: 12px; line-height: 1;
+  cursor: pointer; padding: 0;
+  transition: background .15s;
+}
+.chip-x:hover { background: #e74c3c; }
+
+#players.locked .chip-x { pointer-events: none; opacity: .35; }
+
+#add-form { display: flex; gap: 8px; justify-content: center; }
+
+#new-name {
+  flex: 0 1 300px;
   padding: 10px 14px;
-  margin-bottom: 18px;
   border: 1px solid rgba(255,255,255,.25);
   border-radius: 10px;
   background: rgba(255,255,255,.08);
@@ -34,7 +76,31 @@ h1 { margin: 0 0 16px; font-weight: 700; }
   text-align: center;
   outline: none;
 }
-#options:focus { border-color: #f1c40f; }
+#new-name:focus { border-color: #f1c40f; }
+#new-name::placeholder { color: rgba(255,255,255,.4); }
+
+#add-btn {
+  padding: 10px 18px;
+  border: none; border-radius: 10px;
+  background: rgba(255,255,255,.14);
+  color: #fff; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+#add-btn:hover:not(:disabled) { background: rgba(255,255,255,.26); }
+#new-name:disabled, #add-btn:disabled { opacity: .5; }
+
+#reset-btn {
+  padding: 10px 14px;
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255,255,255,.75);
+  font-size: 14px;
+  cursor: pointer;
+}
+#reset-btn:hover { border-color: #e74c3c; color: #fff; }
+#players.locked #reset-btn { pointer-events: none; opacity: .35; }
 
 .wheel-box { position: relative; display: inline-block; }
 
@@ -87,7 +153,16 @@ canvas {
 <body>
 <div class="wrap">
   <h1>🎡 Колесо фортуны</h1>
-  <input id="options" value="Ольга Козлова, Дмитрий Антонов, Дмитрий Калинин, Арсений Коротков, Дмитрий Максимов, Максим Бирюков, Инна Грекова, Михаил Васильев, Константин Мариненков, Тимур Мустафин">
+
+  <div id="players">
+    <div id="chips"></div>
+    <form id="add-form" autocomplete="off">
+      <input id="new-name" placeholder="Имя нового игрока" maxlength="30">
+      <button type="submit" id="add-btn">Добавить</button>
+      <button type="button" id="reset-btn" hidden>Вернуть всех</button>
+    </form>
+  </div>
+
   <div class="wheel-box">
     <div class="pointer"></div>
     <canvas id="wheel" width="500" height="500"></canvas>
@@ -101,7 +176,12 @@ const canvas    = document.getElementById('wheel');
 const ctx       = canvas.getContext('2d');
 const resultEl  = document.getElementById('result');
 const spinBtn   = document.getElementById('spin');
-const optionsIn = document.getElementById('options');
+const playersEl = document.getElementById('players');
+const chipsEl   = document.getElementById('chips');
+const addForm   = document.getElementById('add-form');
+const newNameIn = document.getElementById('new-name');
+const addBtn    = document.getElementById('add-btn');
+const resetBtn  = document.getElementById('reset-btn');
 
 const PALETTE = [
   '#e74c3c', '#f39c12', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db',
@@ -109,22 +189,63 @@ const PALETTE = [
 ];
 
 const TAU = Math.PI * 2;
+
+const DEFAULT_NAMES = [
+  'Ольга Козлова',
+  'Дмитрий Антонов',
+  'Дмитрий Калинин',
+  'Арсений Коротков',
+  'Дмитрий Максимов',
+  'Максим Бирюков',
+  'Инна Грекова',
+  'Михаил Васильев',
+  'Константин Мариненков',
+  'Тимур Мустафин'
+];
+
+// localStorage: кто исключён крестиком и кого добавили вручную
+const LS_KEY = 'wheel-of-fortune:v1';
+
+function loadState() {
+  let excluded = [], extra = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    if (Array.isArray(saved.excluded)) excluded = saved.excluded;
+    if (Array.isArray(saved.extra)) extra = saved.extra;
+  } catch (e) { /* повреждённые данные — стартуем с полным списком */ }
+  return { excluded: new Set(excluded), extra };
+}
+
+const state = loadState();
+
+const currentNames = () => [
+  ...DEFAULT_NAMES.filter(n => !state.excluded.has(n)),
+  ...state.extra
+];
+
+const save = () =>
+  localStorage.setItem(LS_KEY, JSON.stringify({
+    excluded: [...state.excluded],
+    extra: state.extra
+  }));
+
+let names = currentNames();
+
 let rotation = 0;    // текущий угол поворота колеса
 let spinning = false;
 let winner   = null; // индекс подсвеченного сектора
 
-const getOptions = () =>
-  optionsIn.value.split(',').map(s => s.trim()).filter(Boolean);
-
-function draw(opts) {
+function draw(list) {
   const cx = canvas.width / 2, cy = canvas.height / 2;
   const R  = cx - 8;
-  const seg = TAU / opts.length;
-  const fontSize = opts.length > 8 ? 14 : 17;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!list.length) return;
 
-  opts.forEach((label, i) => {
+  const seg = TAU / list.length;
+  const fontSize = list.length > 8 ? 14 : 17;
+
+  list.forEach((label, i) => {
     const a0 = rotation + i * seg;
     const highlighted = i === winner;
 
@@ -161,31 +282,111 @@ function draw(opts) {
   ctx.stroke();
 }
 
-function finish(opts) {
-  const seg = TAU / opts.length;
+function renderChips() {
+  chipsEl.innerHTML = '';
+
+  if (!names.length) {
+    const empty = document.createElement('span');
+    empty.className = 'empty';
+    empty.textContent = 'Список пуст — добавьте игроков';
+    chipsEl.appendChild(empty);
+    return;
+  }
+
+  names.forEach((name, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.background = PALETTE[i % PALETTE.length];
+
+    const label = document.createElement('span');
+    label.textContent = name;
+
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'chip-x';
+    x.textContent = '✕';
+    x.title = 'Убрать ' + name;
+    x.addEventListener('click', () => {
+      if (spinning) return;
+      const name = names.splice(i, 1)[0];
+      if (DEFAULT_NAMES.includes(name)) state.excluded.add(name);
+      else state.extra = state.extra.filter(n => n !== name);
+      save();
+      winner = null;
+      resultEl.textContent = '';
+      renderChips();
+      draw(names);
+    });
+
+    chip.append(dot, label, x);
+    chipsEl.appendChild(chip);
+  });
+
+  resetBtn.hidden = !state.excluded.size && !state.extra.length;
+}
+
+addForm.addEventListener('submit', e => {
+  e.preventDefault();
+  if (spinning) return;
+  const name = newNameIn.value.trim();
+  if (!name) return;
+
+  names.push(name);
+  state.extra.push(name);
+  save();
+  newNameIn.value = '';
+  newNameIn.focus();
+  winner = null;
+  resultEl.textContent = '';
+  renderChips();
+  draw(names);
+});
+
+// вернуть полный состав: снять исключения и убрать гостей
+resetBtn.addEventListener('click', () => {
+  if (spinning) return;
+  state.excluded.clear();
+  state.extra = [];
+  save();
+  names = currentNames();
+  winner = null;
+  resultEl.textContent = '';
+  renderChips();
+  draw(names);
+});
+
+function finish(list) {
+  const seg = TAU / list.length;
   // стрелка сверху = угол -90°; ищем сектор, попавший под неё
   let local = (-Math.PI / 2 - rotation) % TAU;
   if (local < 0) local += TAU;
-  winner = Math.floor(local / seg) % opts.length;
+  winner = Math.floor(local / seg) % list.length;
 
-  draw(opts);
-  resultEl.textContent = '🎉 Победитель: ' + opts[winner];
+  draw(list);
+  resultEl.textContent = '🎉 Победитель: ' + list[winner];
   spinning = false;
   spinBtn.disabled = false;
-  optionsIn.disabled = false;
+  playersEl.classList.remove('locked');
+  newNameIn.disabled = false;
+  addBtn.disabled = false;
 }
 
 spinBtn.addEventListener('click', () => {
   if (spinning) return;
-  const opts = getOptions();
-  if (opts.length < 2) {
-    resultEl.textContent = 'Добавьте хотя бы два варианта';
+  const list = [...names];
+  if (list.length < 2) {
+    resultEl.textContent = 'Нужно хотя бы двух игроков';
     return;
   }
 
   spinning = true;
   spinBtn.disabled = true;
-  optionsIn.disabled = true;
+  playersEl.classList.add('locked');
+  newNameIn.disabled = true;
+  addBtn.disabled = true;
   winner = null;
   resultEl.textContent = '';
 
@@ -198,21 +399,15 @@ spinBtn.addEventListener('click', () => {
     const t    = Math.min(1, (now - start) / duration);
     const ease = 1 - Math.pow(1 - t, 4); // easeOutQuart — быстрый разгон, мягкое торможение
     rotation   = from + (target - from) * ease;
-    draw(opts);
+    draw(list);
     if (t < 1) requestAnimationFrame(frame);
-    else finish(opts);
+    else finish(list);
   }
   requestAnimationFrame(frame);
 });
 
-optionsIn.addEventListener('input', () => {
-  if (spinning) return;
-  winner = null;
-  resultEl.textContent = '';
-  draw(getOptions());
-});
-
-draw(getOptions());
+renderChips();
+draw(names);
 </script>
 </body>
 </html>
